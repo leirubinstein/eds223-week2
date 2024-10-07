@@ -1,0 +1,221 @@
+---
+title: "EDS 223 Week 2"
+author: "Leilanie Rubinstein"
+format: html
+execute: 
+  warning: false
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+rm(list = ls())
+
+library(sf) # for handling vector data
+library(tidyverse) 
+library(spData) # preloaded spatial data
+library(tmap)
+```
+
+```{r}
+# all functions in sf start with `st_`, which stands for spatiotemporal
+london_point <- st_point(c(0.1, 51.5))
+
+# simple feature collection
+london_geom <- st_sfc(london_point, crs = 4326)
+
+# create a dataframe to add the geometry onto
+london_attrib <- data.frame(
+  name = "London",
+  temperature = 25,
+  date = as.Date("2017-06-021")
+)
+
+london_sf <- st_sf(london_attrib, geometry = london_geom)
+
+class(london_sf)
+
+st_crs(london_sf)$IsGeographic
+```
+
+```{r}
+world <- spData::world
+
+names(world)
+
+summary(world$lifeExp)
+```
+
+```{r}
+world_df <- world &>&
+  select(-geom)
+
+world_df <- world %>%
+  select(continent)
+
+colnames(world_df)
+```
+
+
+```{r}
+world_df <- st_drop_geometry(world)
+
+class(world_df)
+```
+
+```{r}
+london_proj <- data.frame(x = 53000, y = 180000) %>%
+  st_as_sf(coords=c("x", "y"), crs = "EPSG:27700")
+
+st_crs(london_proj) == st_crs(london_sf)
+
+london_sf_transform <- st_transform(london_sf, crs = st_crs(london_proj))
+```
+
+```{r}
+
+if (st_crs(london_sf_transform) == st_crs(london_proj)) {
+  print("coordinate reference systems of datasets match")
+} else {
+  warning("coordinate reference systems do not match")
+}
+```
+
+```{r}
+tm_shape(world, projection = 8857) + 
+  tm_fill(col = "area_km2")
+```
+
+```{r}
+tm_shape(world, projection = 3395) +
+  tm_fill(col = "area_km2")
+```
+
+## Vector attribute subsetting
+
+```{r}
+world %>%
+  dplyr::select(name_long, pop)
+
+# remove columsn
+world %>% 
+  dplyr::select(-subregion)
+
+# rename while selectiing
+world %>%
+  dplyr::select(name = name_long, population = pop)
+```
+
+```{r}
+world1 <- world %>%
+  dplyr::filter(area_km2 < 10000)
+
+# chain together commands
+world %>% 
+  dplyr::filter(continent == "Asia") %>%
+  dplyr::select(name_long, continent, lifeExp) %>%
+  dplyr::slice_max(lifeExp) %>%
+# picks the row with highest life expectancy
+# can use slice functions in groupby functions
+  sf::st_drop_geometry()
+```
+
+```{r}
+world %>%
+  group_by(continent) %>%
+  summarise(population = sum(pop, na.rm = TRUE)) %>%
+  st_drop_geometry()
+# adds the up population from each continent
+```
+
+# 5. Joins with vector attributes 
+
+```{r}
+coffee_data <- spData::coffee_data
+
+# check if we have coffee data for all the countries in the world
+
+nrow(coffee_data)
+nrow(world)
+```
+
+```{r}
+# left join takes our original df and adds onto it with our second data set
+world_coffee <- left_join(world, coffee_data, by = "name_long")
+```
+
+```{r}
+tm_shape(world_coffee) +
+  tm_fill(col = "coffee_production_2017")
+
+# we can see that not all countries have a value bc not all counties produce coffee
+```
+
+```{r}
+# only keeps data that has matching value
+world_coffee_inner <- inner_join(world, coffee_data, by = "name_long")
+
+if(nrow(world_coffee_inner) < nrow(coffee_data)) {
+  warning("inner join does not match original data. potential data loss during join")
+}
+```
+
+```{r}
+# what names are in coffee data are not in world data
+setdiff(coffee_data$name_long, world$name_long)
+```
+
+```{r}
+# search for the DRC in the world dataset
+# `*` = add anything
+drc <- stringr::str_subset(world$name_long, "Dem*.+Congo")
+
+# update coffee dataset with the matching name for the DRC
+coffee_data$name_long[stringr::str_detect(coffee_data)$name_long, "Congo"] <-
+  drc
+
+world_coffee_inner <- inner_join(world, coffee_data, by = "name_long")
+
+if(nrow(world_coffee_inner) < nrow(coffee_data)) {
+  warning("inner join does not match original data. potential data loss during join")
+}
+```
+
+```{r}
+tm_shape(world_coffee_inner) +
+  tm_polygons(fill = "coffee_production_2017",
+              title = "Coffee Production 2017") +
+  tm_layout(legend.outside = TRUE)
+```
+
+```{r}
+# What happens if we left join a sf object onto a data frame?
+coffee_world <- left_join(coffee_data, world, by = "name_long")
+class(coffee_world)
+
+# we get a data frame as the result
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
